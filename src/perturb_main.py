@@ -19,7 +19,9 @@ warnings.filterwarnings('ignore')
 import numpy as np
 from PIL import Image
 import torch
-import datasets, data_utils, eval_utils
+import datasets
+import data_utils
+import eval_utils
 import global_constants as settings
 from log_utils import log
 from stereo_model import StereoModel

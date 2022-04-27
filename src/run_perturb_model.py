@@ -14,9 +14,16 @@ https://arxiv.org/pdf/2009.10142.pdf
   year={2021}
 }
 '''
+
+import os
+print(os.getcwd())
+
 import argparse
 import global_constants as settings
 from perturb_main import run
+
+
+
 
 
 parser = argparse.ArgumentParser()

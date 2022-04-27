@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=2
+#export CUDA_VISIBLE_DEVICES=2
 
 # pretrained_models/PSMNet/pretrained_model_KITTI2012.tar
 # pretrained_models/PSMNet/pretrained_model_KITTI2015.tar

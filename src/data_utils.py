@@ -16,6 +16,8 @@ https://arxiv.org/pdf/2009.10142.pdf
 '''
 import numpy as np
 from PIL import Image
+import os
+from utils import pro_dir
 
 
 def read_paths(filepath):
@@ -35,6 +37,7 @@ def read_paths(filepath):
             # If there was nothing to read
             if path == '':
                 break
+            path = os.path.join(pro_dir,path)
             path_list.append(path)
 
     return path_list
@@ -68,6 +71,8 @@ def load_image(path, shape, normalize=True):
     Returns:
         numpy : 3 x H x W RGB image
     '''
+    import os
+    cwd = os.getcwd()
     n_height, n_width = shape
 
     # Load image and resize
