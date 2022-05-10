@@ -26,6 +26,7 @@ import global_constants as settings
 from log_utils import log
 from stereo_model import StereoModel
 from perturb_model import PerturbationsModel
+from TargetAttack import Transformation
 
 
 def run(image0_path,
@@ -36,10 +37,12 @@ def run(image0_path,
         n_width=settings.N_WIDTH,
         # Perturb method settings
         perturb_method=settings.PERTURB_METHOD,
+        transform_method = 'None',
         perturb_mode=settings.PERTURB_MODE,
         output_norm=settings.OUTPUT_NORM,
         n_step=settings.N_STEP,
         learning_rate=settings.LEARNING_RATE,
+        learning_schedule=None,
         momentum=settings.MOMENTUM,
         probability_diverse_input=settings.PROBABILITY_DIVERSE_INPUT,
         # Stereo model settings
@@ -82,17 +85,20 @@ def run(image0_path,
 
     # Restore stereo model
     stereo_model.restore_model(stereo_model_restore_path)
+    stereo_model.eval()
 
     dataloader = torch.utils.data.DataLoader(
         datasets.StereoDataset(
             image0_paths,
             image1_paths,
             ground_truth_paths,
+            perturb_method=perturb_method,
             shape=(n_height, n_width)),
-        batch_size=1,
-        shuffle=False,
-        num_workers=1,
-        drop_last=False)
+            batch_size=1,
+            shuffle=False,
+            num_workers=1,
+            drop_last=False,
+            )
 
     log('Run settings:', log_path)
     log('n_height=%d  n_width=%d  output_norm=%.3f' %
@@ -101,7 +107,7 @@ def run(image0_path,
     log('perturb_method=%s  perturb_mode=%s' %
         (perturb_method, perturb_mode),
         log_path)
-    log('n_step=%s  learning_rate=%.1e' %
+    log('n_step=%s  learning_rate=%s' %
         (n_step, learning_rate),
         log_path)
     log('momentum=%.2f' %
@@ -130,104 +136,15 @@ def run(image0_path,
     time_per_frame = 0.0
 
     disparities_origin = []
-    noises0_output = []
-    noises1_output = []
-    images0_output = []
-    images1_output = []
-    disparities_output = []
+    noise0_outputs = []
+    noise1_outputs = []
+    images0_outputs = []
+    images1_outputs = []
+    disparities_outputs = []
     ground_truths = []
 
-    for idx, (image0, image1, ground_truth) in enumerate(dataloader):
 
-        if device.type == settings.CUDA:
-            image0 = image0.cuda()
-            image1 = image1.cuda()
-            ground_truth = ground_truth.cuda()
 
-        if len(image0.shape) == 4 and image0.shape[0] == 1:
-            ground_truth = torch.unsqueeze(ground_truth, dim=0)
-
-        # Initialize perturbations
-        perturb_model = PerturbationsModel(
-            perturb_method=perturb_method,
-            perturb_mode=perturb_mode,
-            output_norm=output_norm,
-            n_step=n_step,
-            learning_rate=learning_rate,
-            momentum=momentum,
-            probability_diverse_input=probability_diverse_input,
-            device=device)
-
-        # Forward through through stereo network
-        disparity_origin = stereo_model.forward(image0, image1)
-
-        # Save original disparity
-        disparities_origin.append(
-            np.squeeze(disparity_origin.detach().cpu().numpy()))
-
-        ground_truths.append(
-            np.squeeze(ground_truth.cpu().numpy()))
-
-        time_per_frame_start = time.time()
-
-        # Optimize perturbations for the stereo pair and model
-        noise0_output, noise1_output, image0_output, image1_output = perturb_model.forward(
-            stereo_model=stereo_model,
-            image0=image0,
-            image1=image1,
-            ground_truth=ground_truth)
-
-        time_per_frame = time_per_frame + (time.time() - time_per_frame_start)
-
-        # Forward through network again
-        disparity_output = stereo_model.forward(image0_output, image1_output)
-
-        loss_func = torch.nn.L1Loss()
-        loss = loss_func(disparity_output, ground_truth)
-
-        # Save outputs
-        noises0_output.append(
-            np.transpose(np.squeeze(noise0_output.detach().cpu().numpy()), (1, 2, 0)))
-        noises1_output.append(
-            np.transpose(np.squeeze(noise1_output.detach().cpu().numpy()), (1, 2, 0)))
-        images0_output.append(
-            np.transpose(np.squeeze(image0_output.detach().cpu().numpy()), (1, 2, 0)))
-        images1_output.append(
-            np.transpose(np.squeeze(image1_output.detach().cpu().numpy()), (1, 2, 0)))
-        disparities_output.append(
-            np.squeeze(disparity_output.detach().cpu().numpy()))
-
-        # Log results
-        time_elapse = (time.time() - time_start) / 3600
-
-        log('Sample={:3}/{:3}  L1 Loss={:.5f}  Time Elapsed={:.2f}h'.format(
-            idx + 1, n_sample, loss.item(), time_elapse),
-            log_path)
-
-        # Clean up
-        del perturb_model
-        del image0, image1
-        del image0_output, image1_output
-        del noise0_output, noise1_output
-        del disparity_origin, disparity_output
-        del ground_truth
-        del loss
-
-        if device.type == settings.CUDA:
-            torch.cuda.empty_cache()
-
-    # Perform validation
-    with torch.no_grad():
-        validate(
-            noises0_output=noises0_output,
-            noises1_output=noises1_output,
-            disparities_output=disparities_output,
-            ground_truths=ground_truths,
-            device=device,
-            log_path=log_path)
-
-    log('Time per frame: {:.2f}s'.format(time_per_frame / len(dataloader)), log_path)
-    log('Storing image and depth outputs into {}'.format(output_path), log_path)
 
     image0_output_path = os.path.join(output_path, 'image0_output')
     image1_output_path = os.path.join(output_path, 'image1_output')
@@ -255,30 +172,123 @@ def run(image0_path,
         if not os.path.exists(path):
             os.makedirs(path)
 
-    outputs = zip(
-        images0_output,
-        images1_output,
-        noises0_output,
-        noises1_output,
-        disparities_origin,
-        disparities_output,
-        ground_truths)
 
-    for idx, output in enumerate(outputs):
-        image0_output, \
-            image1_output, \
-            noise0_output, \
-            noise1_output, \
-            disparity_origin, \
-            disparity_output, \
-            ground_truth  = output
+
+    for idx, (image0, image1, ground_truth) in enumerate(dataloader):
+        if device.type == settings.CUDA:
+            image0 = image0.cuda()
+            image1 = image1.cuda()
+            ground_truth = ground_truth.cuda()
+
+        if len(image0.shape) == 4 and image0.shape[0] == 1:
+            ground_truth = torch.unsqueeze(ground_truth, dim=0)
+
+        # Initialize perturbations
+
+        #TODO: study 1
+        perturb_model = PerturbationsModel(
+            perturb_method=perturb_method,
+            perturb_mode=perturb_mode,
+            output_norm=output_norm,
+            n_step=n_step,
+            learning_rate=learning_rate,
+            learning_schedule = learning_schedule,
+            transform_method=transform_method,
+            momentum=momentum,
+            probability_diverse_input=probability_diverse_input,
+            device=device)
+
+
+        #if attack method is target, transform the ground truth
+        if perturb_method == 'target':
+            with torch.no_grad():
+                disparity_origin = stereo_model.forward(image0, image1)
+
+            if transform_method == 'flip':
+                ground_truth = Transformation.flip_horizontal(disparity_origin)
+            elif transform_method == 'multiply':
+                ground_truth = Transformation.multiply_object(disparity_origin,ground_truth)
+            elif transform_method == 'remove':
+                ground_truth = Transformation.remove_object(disparity_origin, ground_truth, window = 10)
+            elif transform_method == 'create':
+                ground_truth = Transformation.create_object(disparity_origin)
+
+
+
+        # Forward through through stereo network
+        #disparity_origin = stereo_model.forward(image0, image1)
+
+        # Save original disparity
+        disparities_origin.append(
+            np.squeeze(disparity_origin.detach().cpu().numpy()))
+
+        if perturb_method == 'target':
+            ground_truths.append(
+                np.squeeze(ground_truth.detach().cpu().numpy()))
+        else:
+            ground_truths.append(
+                np.squeeze(ground_truth.cpu().numpy()))
+
+
+
+
+
+
+
+
+
+        time_per_frame_start = time.time()
+
+        # Optimize perturbations for the stereo pair and model
+        #Noise는 perturbation만 있음, Image0는 perturbed 이미지
+        noise0_output, noise1_output, image0_output, image1_output = perturb_model.forward(
+            stereo_model=stereo_model,
+            image0=image0,
+            image1=image1,
+            ground_truth=ground_truth)
+
+        time_per_frame = time_per_frame + (time.time() - time_per_frame_start)
+
+        # Forward through network again
+        disparity_output = stereo_model.forward(image0_output, image1_output)
+
+        loss_func = torch.nn.L1Loss()
+        loss = loss_func(disparity_output, ground_truth)
+
+        noise0_output = np.transpose(np.squeeze(noise0_output.detach().cpu().numpy()), (1, 2, 0))
+        noise1_output = np.transpose(np.squeeze(noise1_output.detach().cpu().numpy()), (1, 2, 0))
+        image0_output = np.transpose(np.squeeze(image0_output.detach().cpu().numpy()), (1, 2, 0))
+        image1_output = np.transpose(np.squeeze(image1_output.detach().cpu().numpy()), (1, 2, 0))
+        disparity_output = np.squeeze(disparity_output.detach().cpu().numpy())
+        disparity_origin = np.squeeze(disparity_origin.detach().cpu().numpy())
+        ground_truth = np.squeeze(ground_truth.detach().cpu().numpy())
+
+
+
+        # Save outputs
+        noise0_outputs.append(noise0_output)
+        noise1_outputs.append(noise1_output)
+        images0_outputs.append(image0_output)
+        images1_outputs.append(image1_output)
+        disparities_outputs.append(disparity_output)
+
+        # Log results
+        time_elapse = (time.time() - time_start) / 3600
+
+        log('Sample={:3}/{:3}  L1 Loss={:.5f}  Time Elapsed={:.2f}h'.format(
+            idx + 1, n_sample, loss.item(), time_elapse),
+            log_path)
+
+
+
+        # Save to disk
 
         image_filename = '{:05d}.png'.format(idx)
         numpy_filename = '{:05d}.npy'.format(idx)
 
-        # Save to disk
-        Image.fromarray(np.uint8(image0_output * 255.0)).save(os.path.join(image0_output_path, image_filename))
-        Image.fromarray(np.uint8(image1_output * 255.0)).save(os.path.join(image1_output_path, image_filename))
+
+        Image.fromarray(np.uint8(image0_output * 255)).save(os.path.join(image0_output_path, image_filename))
+        Image.fromarray(np.uint8(image1_output * 255)).save(os.path.join(image1_output_path, image_filename))
 
         np.save(os.path.join(noise0_output_path, numpy_filename), noise0_output)
         np.save(os.path.join(noise1_output_path, numpy_filename), noise1_output)
@@ -287,6 +297,32 @@ def run(image0_path,
         np.save(os.path.join(disparity_output_path, numpy_filename), disparity_output)
 
         np.save(os.path.join(ground_truth_path, numpy_filename), ground_truth)
+
+
+        # Clean up
+        del perturb_model
+        del image0, image1
+        del image0_output, image1_output
+        del noise0_output, noise1_output
+        del disparity_origin, disparity_output
+        del ground_truth
+        del loss
+
+        if device.type == settings.CUDA:
+            torch.cuda.empty_cache()
+
+    # Perform validation
+    with torch.no_grad():
+        validate(
+            noises0_output=noise0_outputs,
+            noises1_output=noise1_outputs,
+            disparities_output=disparities_outputs,
+            ground_truths=ground_truths,
+            device=device,
+            log_path=log_path)
+
+    log('Time per frame: {:.2f}s'.format(time_per_frame / len(dataloader)), log_path)
+
 
 def validate(noises0_output,
              noises1_output,

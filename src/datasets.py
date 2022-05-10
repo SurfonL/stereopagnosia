@@ -16,6 +16,8 @@ https://arxiv.org/pdf/2009.10142.pdf
 '''
 import torch.utils.data
 import data_utils
+from PIL import Image
+import numpy as np
 
 
 class StereoDataset(torch.utils.data.Dataset):
@@ -39,8 +41,10 @@ class StereoDataset(torch.utils.data.Dataset):
                  image0_paths,
                  image1_paths,
                  ground_truth_paths,
+                 perturb_method='target',
                  shape=(None, None),
-                 normalize=True):
+                 normalize=True,
+                 ):
 
         self.image0_paths = image0_paths
         self.image1_paths = image1_paths
@@ -48,6 +52,7 @@ class StereoDataset(torch.utils.data.Dataset):
         self.n_height = shape[0]
         self.n_width = shape[1]
         self.normalize = normalize
+        self.perturb_method = perturb_method
 
     def __getitem__(self, index):
 
@@ -65,9 +70,12 @@ class StereoDataset(torch.utils.data.Dataset):
             normalize=self.normalize)
 
         # Load ground truth
-        ground_truth = data_utils.load_disparity(
-            self.ground_truth_paths[index],
-            shape=shape_resize)
+        if self.perturb_method == 'target':
+            ground_truth = np.array(Image.open(self.ground_truth_paths[index]))
+        else:
+            ground_truth = data_utils.load_disparity(
+                self.ground_truth_paths[index],
+                shape=shape_resize)
 
         return image0, image1, ground_truth
 

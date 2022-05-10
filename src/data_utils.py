@@ -14,10 +14,14 @@ https://arxiv.org/pdf/2009.10142.pdf
   year={2021}
 }
 '''
+
 import numpy as np
 from PIL import Image
 import os
+import sys
+sys.path.append(os.path.join(os.getcwd()))
 from utils import pro_dir
+
 
 
 def read_paths(filepath):
@@ -37,7 +41,11 @@ def read_paths(filepath):
             # If there was nothing to read
             if path == '':
                 break
-            path = os.path.join(pro_dir,path)
+            d = path.replace('\\','/')
+            path = os.path.join(pro_dir,d)
+
+
+
             path_list.append(path)
 
     return path_list

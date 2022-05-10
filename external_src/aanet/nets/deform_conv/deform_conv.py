@@ -8,7 +8,6 @@ from torch.nn.modules.utils import _pair, _single
 
 from . import deform_conv_cuda
 
-
 class DeformConvFunction(Function):
 
     @staticmethod

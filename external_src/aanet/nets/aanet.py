@@ -1,5 +1,10 @@
 import torch.nn as nn
 import torch.nn.functional as F
+import sys
+import os
+from utils import pro_dir
+p = os.path.join(pro_dir,'external_src','aanet')
+sys.path.append(p)
 
 from nets.feature import (StereoNetFeature, PSMNetFeature, GANetFeature, GCNetFeature,
                           FeaturePyrmaid, FeaturePyramidNetwork)

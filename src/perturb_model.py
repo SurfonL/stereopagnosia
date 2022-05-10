@@ -19,6 +19,7 @@ import numpy as np
 from skimage.util import random_noise
 import torch
 import global_constants as settings
+from TargetAttack import TargetPerturbations, TargetPerturbationsModel, Transformation
 
 
 class PerturbationsModel(object):
@@ -47,24 +48,28 @@ class PerturbationsModel(object):
     def __init__(self,
                  perturb_method=settings.PERTURB_METHOD,
                  perturb_mode=settings.PERTURB_MODE,
+                 transform_method=None,
                  output_norm=settings.OUTPUT_NORM,
                  n_step=settings.N_STEP,
                  learning_rate=settings.LEARNING_RATE,
+                 learning_schedule = None,
                  momentum=settings.MOMENTUM,
                  probability_diverse_input=settings.PROBABILITY_DIVERSE_INPUT,
                  device=torch.device(settings.CUDA)):
 
         self.__perturb_method = perturb_method
         self.__perturb_mode = perturb_mode
+        self.__transform_method = transform_method
         self.__output_norm = output_norm
         self.__n_step = n_step
         self.__learning_rate = learning_rate
+        self.__learning_schedule = learning_schedule
         self.__momentum = momentum
         self.__probability_diverse_input = probability_diverse_input
 
         self.__device = device
 
-    def forward(self, stereo_model, image0, image1, ground_truth):
+    def forward(self, stereo_model, image0, image1, ground_truth, output_norm = None):
         '''
         Applies perturbations to image and clamp
 
@@ -99,6 +104,9 @@ class PerturbationsModel(object):
 
         elif self.__perturb_method == 'uniform':
             noise0, noise1 = self.__uniform(image0, image1)
+
+        elif self.__perturb_method == 'target':
+            noise0, noise1 = self.__target(stereo_model, image0, image1, ground_truth)
 
         elif self.__perturb_method == 'none':
             noise0 = torch.zeros_like(image0)
@@ -480,3 +488,140 @@ class PerturbationsModel(object):
         assert ground_truth.shape == ground_truth_output.shape
 
         return image0_output, image1_output, ground_truth_output
+
+    def __target(self, stereo_model, image0, image1, ground_truth):
+        b,c,h,w = image0.shape
+
+        n_step = self.__n_step
+        learning_rate = self.__learning_rate
+
+        model = TargetPerturbationsModel(
+            n_height=h,
+            n_width=w,
+            n_channel=3,
+            output_norm = self.__output_norm
+        )
+
+
+        schedule_pos = 0
+        optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate[0])
+
+        # import neptune.new as neptune
+        #
+        # run = neptune.init(
+        #     project="woojin.jeon337/Stereo-Target-Attack",
+        #     api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI3MjY5MDI4ZC03ZmQ0LTRhMDEtYmMyMC03MDZhNzYxZTQ4ODIifQ==",
+        # )  # your credentials
+
+
+        for step in range(1, n_step + 1):
+
+
+            if step > self.__learning_schedule[schedule_pos]:
+                schedule_pos = schedule_pos + 1
+                learning_rate = self.__learning_rate[schedule_pos]
+
+                # Update optimizer learning rates
+                for g in optimizer.param_groups:
+                    g['lr'] = learning_rate
+
+            # Compute and apply the perturbations to the image
+            noise0, noise1, image0_output,image1_output = model.forward(image0, image1)
+
+            # if mask_constraint == 'within_mask':
+            #     noise_output *= class_mask
+            # elif mask_constraint == 'out_of_mask':
+            #     noise_output *= (1.0 - class_mask)
+            #
+            # if mask_constraint != 'none':
+            #     image_output = torch.clamp(image + noise_output, 0.0, 1.0)
+            depth_output = stereo_model.forward(image0_output, image1_output)
+
+            loss = model.compute_loss(
+                depth_output=depth_output,
+                depth_target=ground_truth)
+
+            optimizer.zero_grad()
+            loss.backward(retain_graph=True)
+            optimizer.step()
+
+            if step % 50 == 0:
+                print('Loss = {:.5f}'.format(loss.item()), end=' |',flush=True)
+            # sys.stdout.write(
+            #     'Sample={:3}/{:3}  Step={:3}/{:3}  Loss={:.5f}\r'.format(
+            #         idx + 1, n_sample, step, n_step, loss.item()))
+            # sys.stdout.flush()
+            # params = {"learning_rate": learning_rate}
+            # run["parameters"] = params
+            # run["train/loss"].log(loss.item())
+        return noise0, noise1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        #
+        # '''
+        # Computes adversarial perturbations using fast gradient sign method
+        #
+        # Args:
+        #     stereo_model : object
+        #         stereo network
+        #     image0 : tensor
+        #         N x C x H x W RGB image
+        #     image1 : tensor
+        #         N x C x H x W RGB image
+        #     ground_truth : tensor
+        #         N x 1 x H x W ground truth disparity
+        #
+        # Returns:
+        #     tensor : uniform noise/perturbations for left image
+        #     tensor : uniform noise/perturbations for right image
+        # '''
+        #
+        # # Set gradients for image to be true
+        # image0 = torch.autograd.Variable(image0, requires_grad=True)
+        # image1 = torch.autograd.Variable(image1, requires_grad=True)
+        #
+        # # Compute loss
+        # loss = stereo_model.compute_loss(image0, image1, ground_truth)
+        # loss.backward(retain_graph=True)
+        #
+        # # Compute perturbations based on fast gradient sign method
+        # if self.__perturb_mode == 'both':
+        #     noise0_output = self.__output_norm * torch.sign(image0.grad.data)
+        #     noise1_output = self.__output_norm * torch.sign(image1.grad.data)
+        #
+        # elif self.__perturb_mode == 'left':
+        #     noise0_output = self.__output_norm * torch.sign(image0.grad.data)
+        #     noise1_output = torch.zeros_like(image1)
+        #
+        # elif self.__perturb_mode == 'right':
+        #     noise0_output = torch.zeros_like(image0)
+        #     noise1_output = self.__output_norm * torch.sign(image1.grad.data)
+        #
+        # else:
+        #     raise ValueError('Invalid perturbation mode: %s' % self.__perturb_mode)
+        #
+        # return noise0_output, noise1_output

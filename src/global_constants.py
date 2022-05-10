@@ -28,7 +28,7 @@ PERTURB_METHOD                      = 'fgsm'
 PERTURB_MODE                        = 'both'
 OUTPUT_NORM                         = 0.02
 N_STEP                              = 40
-LEARNING_RATE                       = 2e-3
+LEARNING_RATE                       = [2e-3]
 MOMENTUM                            = 0.47
 PROBABILITY_DIVERSE_INPUT           = 0.00
 

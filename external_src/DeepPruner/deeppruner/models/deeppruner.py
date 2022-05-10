@@ -12,8 +12,12 @@
 #
 # Written by Shivam Duggal
 # ---------------------------------------------------------------------------
-
 from __future__ import print_function
+import os, sys
+from utils import pro_dir
+d = os.path.join(pro_dir,'external_src','DeepPruner','deeppruner')
+sys.path.append(d)
+
 from models.submodules3d import MinDisparityPredictor, MaxDisparityPredictor, CostAggregator
 from models.submodules2d import RefinementNet
 from models.submodules import SubModule, conv_relu, convbn_2d_lrelu, convbn_3d_lrelu
