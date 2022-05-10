@@ -10,22 +10,22 @@ from utils import pro_dir
 #TODO: 원래 MONO에서 target attak에서 제한 걸던 부분 이해 및 복구
 
 
-n_steps = 750
+n_steps = 50
 learning_rates =[4.0, 2.0, 1.0]
 learning_schedule = [550, 650, 100000]
-transform_method = 'create'
-image0_path = os.path.join(pro_dir, 'testing/kitti_scene_flow_all_image0_create.txt')
-image1_path = os.path.join(pro_dir, 'testing/kitti_scene_flow_all_image1_create.txt')
-ground_truth_path = os.path.join(pro_dir, 'testing/kitti_scene_flow_all_objects_paper.txt')
+transform_method = 'remove'
+image0_path = os.path.join(pro_dir, 'testing/kitti_scene_flow_test_image0_1.txt')
+image1_path = os.path.join(pro_dir, 'testing/kitti_scene_flow_test_image1_1.txt')
+ground_truth_path = os.path.join(pro_dir, 'testing/kitti_scene_flow_test_objects_1.txt')
 # ground_truth_path = os.path.join(pro_dir, 'testing/kitti_scene_flow_test_disparity_10.txt')
 n_height = 256
 n_width = 640
 output_norm = 16/255
 perturb_method = 'target'
 perturb_mode = 'both'
-stereo_method = 'deeppruner'
+stereo_method = 'psmnet'
 
-output_path = os.path.join(pro_dir, 'perturb_models/{}/target/{}_paper'.format(stereo_method,transform_method))
+output_path = os.path.join(pro_dir, 'perturb_models/{}/target/{}_test'.format(stereo_method,transform_method))
 device = 'gpu'
 
 

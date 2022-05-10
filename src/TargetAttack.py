@@ -3,10 +3,24 @@ import global_constants as settings
 import cv2
 import numpy as np
 from PIL import Image
-
+import torch.nn.functional as F
 import matplotlib.pyplot as plt
+import torch.nn as nn
+from torch.autograd import Variable
 
 EPSILON = 1e-8
+
+
+class disparityregression(nn.Module):
+    def __init__(self, maxdisp):
+        super(disparityregression, self).__init__()
+        self.disp = Variable(torch.Tensor(np.reshape(np.array(range(maxdisp)),[1,maxdisp,1,1])).cuda(), requires_grad=False)
+
+    def forward(self, x):
+        disp = self.disp.repeat(x.size()[0],1,x.size()[2],x.size()[3])
+        out = torch.sum(x*disp,1)
+        print(self.disp)
+        return out
 
 class TargetPerturbations(torch.nn.Module):
     '''
@@ -85,6 +99,9 @@ class TargetPerturbationsModel(object):
         # Move to device
         self.to(self.device)
 
+
+        self.dispairtyregress = disparityregression(192)
+
     def forward(self, image0, image1):
         '''
         Applies perturbations to image
@@ -109,13 +126,14 @@ class TargetPerturbationsModel(object):
 
         return noise0, noise1, image0_pert, image1_pert
 
-    def compute_loss(self, depth_output, depth_target):
+    def compute_loss(self, depth_output, depth_target, logits = False):
         '''
         Computes target consistency loss
 
         Args:
             depth_output : tensor
                 N x 1 x H x W source tensor
+                N x D x H x W if logits = True
             depth_target : tensor
                 N x 1 x H x W target tensor
 
@@ -123,10 +141,36 @@ class TargetPerturbationsModel(object):
             float : loss
         '''
 
-        # Compute target depth consistency loss function
-        delta = torch.abs(depth_target - depth_output)
-        delta = delta / (depth_target + EPSILON)
-        loss = torch.mean(delta)
+        if logits:
+            depth_output2 = depth_output
+            depth_target2 = depth_target.round().long()
+
+
+            a1 = depth_output2[0, :, 150, 200]
+            a2 = F.softmax(a1)
+            d = torch.from_numpy(np.array(range(192))).cuda().float()
+            print(a1[9:25])
+            print(torch.matmul(a2, d))
+            print(a2[20:24])
+
+            # b1 = depth_target2[0, :, 150, 200]
+            # b2 = F.softmax(b1)
+            # print(torch.matmul(b2, d))
+
+
+
+
+
+            g = depth_output2.gather(1,depth_target2)
+
+            loss = g.sum()*(-1/(256*640))
+
+            return loss
+        else:
+            # Compute target depth consistency loss function
+            delta = torch.abs(depth_target - depth_output)
+            delta = delta / (depth_target + EPSILON)
+            loss = torch.mean(delta)
 
         return loss
 
@@ -172,7 +216,7 @@ class Transformation:
         return torch.flip(img, dims=[-1])
 
     @classmethod
-    def multiply_object(cls, depth, obj_mask, scale = 1.3):
+    def multiply_object(cls, depth, obj_mask, scale = 2):
         depth = depth.detach().cpu().numpy()
 
         obj_mask = torch.squeeze(obj_mask).detach().cpu().numpy()
@@ -187,7 +231,6 @@ class Transformation:
         target = np.multiply(depth, obj_mask)
 
         target = torch.from_numpy(target).cuda()
-        target = torch.unsqueeze(target, dim=0)
 
         return target
 
@@ -250,7 +293,7 @@ class Transformation:
     def create_object(cls, depth):
         depth = depth.detach().cpu().numpy()
         import imageio
-        j='058'
+        j=136
         obj_mask = imageio.imread(
             'C:\\Users\\Woo\\Desktop\\Research_Projects\\stereopagnosia\\data\\kitti_scene_flow\\training\\obj_map\\000{}_10.png'.format(
                 j))
@@ -260,12 +303,10 @@ class Transformation:
         obj_mask = np.array(obj_mask)
         obj_mask = cv2.medianBlur(obj_mask, 9)
 
-        obj_mask = obj_mask[:-6,:]
-
-        x, y = np.where(obj_mask == 1)
+        x, y = np.where(obj_mask == 2)
 
         new_disp = depth.copy()
-        new_disp[0,0, x+6, y + 130] = create_disp[x, y]
+        new_disp[0,0, x, y + 150] = create_disp[x, y]
         new_disp = torch.from_numpy(new_disp.astype(np.float32)).cuda()
 
         return new_disp

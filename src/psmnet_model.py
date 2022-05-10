@@ -44,7 +44,7 @@ class PSMNetModel(object):
         self.eval()
         self.model.eval()
 
-    def forward(self, image0, image1=None):
+    def forward(self, image0, image1=None, logits = False):
         '''
         Forwards stereo pair through the network
 
@@ -68,14 +68,19 @@ class PSMNetModel(object):
         outputs = self.model(image0, image1)
 
         if self.mode == 'eval':
-            # Get finest output
-            output3 = torch.unsqueeze(outputs[2], dim=1)
+            if logits:
+                cost = outputs[3]
+                return cost
 
-            # If we padded the input, then crop
-            if padding_top != 0 or padding_right != 0:
-                output3 = output3[..., padding_top:, :-padding_right]
+            else:
+                # Get finest output
+                output3 = torch.unsqueeze(outputs[2], dim=1)
 
-            return output3
+                # If we padded the input, then crop
+                if padding_top != 0 or padding_right != 0:
+                    output3 = output3[..., padding_top:, :-padding_right]
+
+                return output3
 
         elif self.mode == 'train':
             outputs = [

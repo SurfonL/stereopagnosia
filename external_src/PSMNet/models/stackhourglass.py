@@ -157,6 +157,6 @@ class PSMNet(nn.Module):
 
         if True: #self.training:
         #if self.training:
-            return pred1, pred2, pred3
+            return pred1, pred2, pred3, cost3
         else:
             return pred3

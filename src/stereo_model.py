@@ -45,7 +45,7 @@ class StereoModel(object):
             from aanet_model import AANetModel
             self.model = AANetModel(device=device)
 
-    def forward(self, image0, image1=None):
+    def forward(self, image0, image1=None, logits = False):
         '''
         Forwards stereo pair through network
 
@@ -61,7 +61,7 @@ class StereoModel(object):
         if image1 is None:
             image0, image1 = image0
 
-        outputs = self.model.forward(image0, image1)
+        outputs = self.model.forward(image0, image1, logits = logits)
 
         return outputs
 

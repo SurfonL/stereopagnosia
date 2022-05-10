@@ -231,12 +231,6 @@ def run(image0_path,
 
 
 
-
-
-
-
-
-
         time_per_frame_start = time.time()
 
         # Optimize perturbations for the stereo pair and model
