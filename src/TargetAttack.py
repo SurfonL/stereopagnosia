@@ -19,7 +19,6 @@ class disparityregression(nn.Module):
     def forward(self, x):
         disp = self.disp.repeat(x.size()[0],1,x.size()[2],x.size()[3])
         out = torch.sum(x*disp,1)
-        print(self.disp)
         return out
 
 class TargetPerturbations(torch.nn.Module):
@@ -126,7 +125,7 @@ class TargetPerturbationsModel(object):
 
         return noise0, noise1, image0_pert, image1_pert
 
-    def compute_loss(self, depth_output, depth_target, logits = False):
+    def compute_loss(self, depth_output, depth_target, logits = False, image0 = None):
         '''
         Computes target consistency loss
 
@@ -142,35 +141,54 @@ class TargetPerturbationsModel(object):
         '''
 
         if logits:
-            depth_output2 = depth_output
+            output_logit = depth_output
+
+
+            output_softmax = F.softmax(output_logit)
+            plt.plot(output_softmax[0, :, 250, 10].cpu().detach().numpy())
+            plt.show()
+            dispairtyregress = disparityregression(192)(output_softmax)
+
+            delta = torch.abs(depth_target - dispairtyregress)
+            delta = delta / (depth_target + EPSILON)
+            loss = torch.mean(delta)
+
             depth_target2 = depth_target.round().long()
-
-
-            a1 = depth_output2[0, :, 150, 200]
-            a2 = F.softmax(a1)
-            d = torch.from_numpy(np.array(range(192))).cuda().float()
-            print(a1[9:25])
-            print(torch.matmul(a2, d))
-            print(a2[20:24])
-
-            # b1 = depth_target2[0, :, 150, 200]
-            # b2 = F.softmax(b1)
-            # print(torch.matmul(b2, d))
-
-
-
-
-
-            g = depth_output2.gather(1,depth_target2)
-
-            loss = g.sum()*(-1/(256*640))
+            # a1 = depth_output2[0, :, 50, 300]
+            # a2 = F.softmax(a1)
+            # plt.plot(a2.cpu().detach().numpy())
+            # plt.show()
+            # d = torch.from_numpy(np.array(range(192))).cuda().float()
+            #
+            # print(torch.matmul(a2, d))
+            # print(a2[20:24])
+            #
+            # a2 = F.softmax(depth_output2)
+            g = output_softmax.gather(1,depth_target2)
+            #
+            # print('target', depth_target2[0, :, 50, 300])
+            # print('gather', g[0, :, 50, 300])
+            #
+            loss = g.sum()*-1
 
             return loss
         else:
-            # Compute target depth consistency loss function
-            delta = torch.abs(depth_target - depth_output)
-            delta = delta / (depth_target + EPSILON)
-            loss = torch.mean(delta)
+            if torch.is_tensor(image0):
+                # Compute target depth consistency loss function
+                delta = torch.abs(depth_target - depth_output)
+                delta = delta / (depth_target + EPSILON)
+
+                intensity = image0.mean(dim=1, keepdim=True)
+                int_e = torch.exp(intensity)
+                delta = int_e * delta
+
+                loss = torch.mean(delta)
+
+            else:
+                # Compute target depth consistency loss function
+                delta = torch.abs(depth_target - depth_output)
+                delta = delta / (depth_target + EPSILON)
+                loss = torch.mean(delta)
 
         return loss
 

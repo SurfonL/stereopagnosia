@@ -490,7 +490,7 @@ class PerturbationsModel(object):
         return image0_output, image1_output, ground_truth_output
 
     def __target(self, stereo_model, image0, image1, ground_truth):
-        logits = True
+        logits = False
 
 
         b,c,h,w = image0.shape
@@ -518,8 +518,6 @@ class PerturbationsModel(object):
 
 
         for step in range(1, n_step + 1):
-
-
             if step > self.__learning_schedule[schedule_pos]:
                 schedule_pos = schedule_pos + 1
                 learning_rate = self.__learning_rate[schedule_pos]
@@ -543,7 +541,9 @@ class PerturbationsModel(object):
             loss = model.compute_loss(
                 depth_output=stereo_output,
                 depth_target=ground_truth,
-                logits = logits)
+                logits = logits,
+                # image0 = image0
+                )
 
             optimizer.zero_grad()
             loss.backward(retain_graph=True)
