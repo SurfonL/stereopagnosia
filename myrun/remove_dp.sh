@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J rem-dp8
+#SBATCH -J pptrem
 #SBATCH -p part1
 #SBATCH -N 1
 #SBATCH -n 4

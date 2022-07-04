@@ -14,18 +14,18 @@ n_steps = 750
 learning_rates =[4.0, 2.0, 1.0]
 learning_schedule = [550, 650, 100000]
 transform_method = 'remove'
-image0_path = os.path.join(pro_dir, 'testing/kitti_scene_flow_all_image0_paper.txt')
-image1_path = os.path.join(pro_dir, 'testing/kitti_scene_flow_all_image1_paper.txt')
-ground_truth_path = os.path.join(pro_dir, 'testing/kitti_scene_flow_all_objects_paper.txt')
+image0_path = os.path.join(pro_dir, 'testing/ppt_image0.txt')
+image1_path = os.path.join(pro_dir, 'testing/ppt_image1.txt')
+ground_truth_path = os.path.join(pro_dir, 'testing/ppt_objects.txt')
 # ground_truth_path = os.path.join(pro_dir, 'testing/kitti_scene_flow_test_disparity_10.txt')
 n_height = 256
 n_width = 640
-output_norm = 8/255
+output_norm = 16/255
 perturb_method = 'target'
 perturb_mode = 'both'
 stereo_method = 'deeppruner'
 
-output_path = os.path.join(pro_dir, 'perturb_models/{}/target/{}_paper'.format(stereo_method,transform_method))
+output_path = os.path.join(pro_dir, 'perturb_models/{}/target/{}_ppt'.format(stereo_method,transform_method))
 device = 'gpu'
 
 

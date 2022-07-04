@@ -109,7 +109,7 @@ class TargetPerturbationsModel(object):
 
         return noise0, noise1, image0_pert, image1_pert
 
-    def compute_loss(self, depth_output, depth_target):
+    def compute_loss(self, depth_output, depth_target, image0 = None):
         '''
         Computes target consistency loss
 
@@ -123,10 +123,21 @@ class TargetPerturbationsModel(object):
             float : loss
         '''
 
-        # Compute target depth consistency loss function
-        delta = torch.abs(depth_target - depth_output)
-        delta = delta / (depth_target + EPSILON)
-        loss = torch.mean(delta)
+        if torch.is_tensor(image0):
+            # Compute target depth consistency loss function
+            delta = torch.abs(depth_target - depth_output)
+            delta = delta / (depth_target + EPSILON)
+
+            # intensity = image0.mean(dim=1, keepdim=True)
+            # int_e = torch.exp(intensity)
+            # delta = int_e * delta
+
+            loss = torch.mean(delta)
+        else:
+            # Compute target depth consistency loss function
+            delta = torch.abs(depth_target - depth_output)
+            delta = delta / (depth_target + EPSILON)
+            loss = torch.mean(delta)
 
         return loss
 
@@ -172,34 +183,41 @@ class Transformation:
         return torch.flip(img, dims=[-1])
 
     @classmethod
-    def multiply_object(cls, depth, obj_mask, scale = 1.3):
-        depth = depth.detach().cpu().numpy()
+    def multiply_object(cls, depth, obj_mask, scale = 1.1):
 
+
+        depth = depth.detach().cpu().numpy()
         obj_mask = torch.squeeze(obj_mask).detach().cpu().numpy()
         obj_mask = Image.fromarray(obj_mask).resize((depth.shape[3], depth.shape[2]), resample=Image.NONE)
         obj_mask = np.array(obj_mask).astype(np.float32)
-        obj_mask = cv2.medianBlur(obj_mask, 3)
 
-        idx = obj_mask == np.min(obj_mask[np.nonzero(obj_mask)])
+        obj_mask = Transformation.filter_mask(obj_mask,obj_no=None)
+
+        obj_no = np.min(obj_mask[np.nonzero(obj_mask)])
+        idx = obj_mask == obj_no
         obj_mask[idx] = scale
         obj_mask[np.logical_not(idx)] = 1
 
         target = np.multiply(depth, obj_mask)
 
+        plt.imshow(np.squeeze(target))
+        plt.show()
+
         target = torch.from_numpy(target).cuda()
         target = torch.unsqueeze(target, dim=0)
+
 
         return target
 
     @classmethod
-    def remove_object(cls, depth, obj_mask, window = 10):
+    def remove_object(cls, depth, obj_mask, window = 5):
         depth = depth.detach().cpu().numpy()
         obj_mask = torch.squeeze(obj_mask).detach().cpu().numpy()
         obj_mask = Image.fromarray(obj_mask).resize((depth.shape[3], depth.shape[2]), resample=Image.NONE)
         obj_mask = np.array(obj_mask)
         obj_mask = cv2.medianBlur(obj_mask, 3)
 
-        obj_no = np.min(obj_mask[np.nonzero(obj_mask)])
+        obj_no = 13
         _,_,h,w = depth.shape
         #bolder object so it covers the whole depth
         mask_resize = np.zeros((h, w))
@@ -210,7 +228,7 @@ class Transformation:
                     win = min(window,i,j,h-1-i,w-1-j)
                     mask_resize[i - win:i + win+1, j - win:j + win+1] = obj_no
 
-        #reverse pixels, as ㅑㅅ will be multipied to depth
+        #reverse pixels, as will be multipied to depth
         idx = mask_resize == obj_no
         mask_resize[idx] = 0
         mask_resize[np.logical_not(idx)] = 1
@@ -269,3 +287,31 @@ class Transformation:
         new_disp = torch.from_numpy(new_disp.astype(np.float32)).cuda()
 
         return new_disp
+
+    @staticmethod
+    def filter_mask(obj_mask, obj_no=None):
+        def contraharmonic_mean(img, size, Q):
+            num = np.power(img, Q + 1)
+            denom = np.power(img, Q)
+            kernel = np.full(size, 1.0)
+            result = cv2.filter2D(num, -1, kernel) / (cv2.filter2D(denom, -1, kernel) + 0.001)
+            return result
+        obj_no = np.min(obj_mask[np.nonzero(obj_mask)]) if obj_no == None else obj_no
+
+        idx = obj_mask == obj_no
+        obj_mask[idx] = 1
+        obj_mask[np.logical_not(idx)] = 0
+        obj_mask = contraharmonic_mean(obj_mask, (4, 4), 0.5)
+        obj_mask = np.ceil(obj_mask)
+
+        obj_mask = contraharmonic_mean(obj_mask, (7, 7), 1)
+        obj_mask = np.ceil(obj_mask)
+        k = np.ones((7, 7), np.uint8)
+        obj_mask = cv2.erode(obj_mask, k)
+
+        return obj_mask
+
+    @classmethod
+    def scale(cls, img, sc):
+
+        return img*sc

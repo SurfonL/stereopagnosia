@@ -27,7 +27,7 @@ from log_utils import log
 from stereo_model import StereoModel
 from perturb_model import PerturbationsModel
 from TargetAttack import Transformation
-
+from matplotlib import cm
 
 def run(image0_path,
         image1_path,
@@ -212,7 +212,8 @@ def run(image0_path,
                 ground_truth = Transformation.remove_object(disparity_origin, ground_truth, window = 10)
             elif transform_method == 'create':
                 ground_truth = Transformation.create_object(disparity_origin)
-
+            if transform_method == 'scale':
+                ground_truth = Transformation.scale(disparity_origin,1/1.3)
 
 
         # Forward through through stereo network
@@ -295,6 +296,15 @@ def run(image0_path,
 
         np.save(os.path.join(disparity_origin_path, numpy_filename), disparity_origin)
         np.save(os.path.join(disparity_output_path, numpy_filename), disparity_output)
+
+        disparity_origin = disparity_origin / 50
+        disparity_origin = Image.fromarray(np.uint8(cm.viridis(disparity_origin) * 255))
+        disparity_origin.save(os.path.join(disparity_origin_path, image_filename))
+
+        disparity_output = disparity_output / 50
+        disparity_output = Image.fromarray(np.uint8(cm.viridis(disparity_output) * 255))
+        disparity_output.save(os.path.join(disparity_output_path, image_filename))
+
 
         np.save(os.path.join(ground_truth_path, numpy_filename), ground_truth)
 

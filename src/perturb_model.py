@@ -539,7 +539,9 @@ class PerturbationsModel(object):
 
             loss = model.compute_loss(
                 depth_output=depth_output,
-                depth_target=ground_truth)
+                depth_target=ground_truth,
+                image0 = image0
+            )
 
             optimizer.zero_grad()
             loss.backward(retain_graph=True)
