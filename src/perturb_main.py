@@ -142,6 +142,7 @@ def run(image0_path,
     images1_outputs = []
     disparities_outputs = []
     ground_truths = []
+    disparities_origin = []
 
 
 
@@ -198,12 +199,10 @@ def run(image0_path,
             probability_diverse_input=probability_diverse_input,
             device=device)
 
-
+        with torch.no_grad():
+            disparity_origin = stereo_model.forward(image0, image1)
         #if attack method is target, transform the ground truth
         if perturb_method == 'target':
-            with torch.no_grad():
-                disparity_origin = stereo_model.forward(image0, image1)
-
             if transform_method == 'flip':
                 ground_truth = Transformation.flip_horizontal(disparity_origin)
             elif transform_method == 'multiply':

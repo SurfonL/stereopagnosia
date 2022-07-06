@@ -108,6 +108,9 @@ class PerturbationsModel(object):
         elif self.__perturb_method == 'target':
             noise0, noise1 = self.__target(stereo_model, image0, image1, ground_truth)
 
+        elif self.__perturb_method == 'patch':
+            noise0, noise1 = self.__patch(stereo_model, image0, image1, ground_truth)
+
         elif self.__perturb_method == 'none':
             noise0 = torch.zeros_like(image0)
             noise1 = torch.zeros_like(image1)
@@ -557,6 +560,51 @@ class PerturbationsModel(object):
             # run["parameters"] = params
             # run["train/loss"].log(loss.item())
         return noise0, noise1
+
+    def __patch(self, stereo_model, image0, image1, ground_truth):
+        '''
+        Computes adversarial perturbations using fast gradient sign method
+
+        Args:
+            stereo_model : object
+                stereo network
+            image0 : tensor
+                N x C x H x W RGB image
+            image1 : tensor
+                N x C x H x W RGB image
+            ground_truth : tensor
+                N x 1 x H x W ground truth disparity
+
+        Returns:
+            tensor : uniform noise/perturbations for left image
+            tensor : uniform noise/perturbations for right image
+        '''
+
+        # Set gradients for image to be true
+        image0 = torch.autograd.Variable(image0, requires_grad=True)
+        image1 = torch.autograd.Variable(image1, requires_grad=True)
+
+        # Compute loss
+        loss = stereo_model.compute_loss(image0, image1, ground_truth)
+        loss.backward(retain_graph=True)
+
+        # Compute perturbations based on fast gradient sign method
+        if self.__perturb_mode == 'both':
+            noise0_output = self.__output_norm * torch.sign(image0.grad.data)
+            noise1_output = self.__output_norm * torch.sign(image1.grad.data)
+
+        elif self.__perturb_mode == 'left':
+            noise0_output = self.__output_norm * torch.sign(image0.grad.data)
+            noise1_output = torch.zeros_like(image1)
+
+        elif self.__perturb_mode == 'right':
+            noise0_output = torch.zeros_like(image0)
+            noise1_output = self.__output_norm * torch.sign(image1.grad.data)
+
+        else:
+            raise ValueError('Invalid perturbation mode: %s' % self.__perturb_mode)
+
+        return noise0_output, noise1_output
 
 
 
